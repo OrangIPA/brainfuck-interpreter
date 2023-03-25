@@ -1,4 +1,4 @@
-use std::{env, fs, process, io::stdin};
+use std::{env, fs, io::stdin, process};
 
 const OPENING_BRACKET_U8: u8 = '[' as u8;
 const CLOSING_BRACKET_U8: u8 = ']' as u8;
@@ -11,13 +11,15 @@ const COM_U8: u8 = ',' as u8;
 
 struct Tape {
     cells: [u8; 10000],
-    ptr: usize
+    ptr: usize,
+    inst: Vec<char>,
+    inst_ptr: usize,
 }
 
 impl Tape {
     fn left(&mut self) {
         match self.ptr {
-            0  => panic!("out of bounds!"),
+            0 => panic!("out of bounds!"),
             _ => self.ptr -= 1,
         }
     }
@@ -25,7 +27,7 @@ impl Tape {
     fn right(&mut self) {
         match self.ptr {
             10000 => panic!("out of bounds!"),
-            _ => self.ptr += 1
+            _ => self.ptr += 1,
         }
     }
 
@@ -37,37 +39,18 @@ impl Tape {
         self.cells[self.ptr] -= val;
     }
 
-    fn lp(&mut self) {
-        // Escape the loop if current cell have the value 0
-        if self.cells[self.ptr] == 0 {
-            self.inc(1)
-        }
-
-        // Track how much nested loop the 'local pointer' have been through
-        let mut count = 0usize;
-
-        // Iterate for each cell from current pointer to address zero
-        for _ in self.ptr..0 {
-            let local_ptr = self.ptr - count;
-            let local_val = self.cells[local_ptr];
-            match (count, local_val) {
-                (0, CLOSING_BRACKET_U8) => {
-                    self.ptr += 1;
-                    break;
-                },
+    fn continue_loop(&mut self) {
+        let mut count = 0;
+        for i in (0..self.inst_ptr).rev() {
+            let inst_char = self.inst.get(i).unwrap().to_owned() as u8;
+            match (count, inst_char) {
                 (0, OPENING_BRACKET_U8) => {
-                    self.ptr = local_ptr;
+                    self.inst_ptr = i;
+                    return;
                 },
-                (_, CLOSING_BRACKET_U8) => {
-                    count += 1;
-                },
-                (_, OPENING_BRACKET_U8) => {
-                    count -= 1;
-                },
-                (_, _)
-                    if local_ptr == 0 && count != 1 => panic!("fix your brackets!"),
+                (_, CLOSING_BRACKET_U8) => count += 1,
+                (_, OPENING_BRACKET_U8) => count -= 1,
                 (_, _) => (),
-
             }
         }
     }
@@ -99,28 +82,47 @@ fn main() {
         }
     };
 
+    let instruction_chars = instruction
+        .clone()
+        .into_iter()
+        .map(|v| v as char)
+        .collect::<Vec<char>>();
+
     let mut tape = Tape {
-        cells: [0;10000],
+        cells: [0; 10000],
         ptr: 0,
-        
+        inst: instruction_chars,
+        inst_ptr: 0,
     };
 
-    for c in instruction {
+    while tape.inst_ptr < tape.inst.len() {
+        let c = tape.inst.get(tape.inst_ptr).unwrap().to_owned() as u8;
         match c {
             ADD_U8 => tape.inc(1),
             MIN_U8 => tape.dec(1),
             LEFT_U8 => tape.left(),
             RIGHT_U8 => tape.right(),
-            DOT_U8 => print!("{}", tape.read()),
+            DOT_U8 => print!("{}", tape.read() as char),
             COM_U8 => {
                 let mut val: String = String::new();
                 stdin().read_line(&mut val).unwrap();
                 if val.len() == 1 {
-                    tape.write(val.chars().collect::<Vec<char>>().get(0).unwrap().to_owned() as u8);
+                    tape.write(
+                        val.chars()
+                            .collect::<Vec<char>>()
+                            .get(0)
+                            .unwrap()
+                            .to_owned() as u8,
+                    );
                 }
-            },
-            CLOSING_BRACKET_U8 => tape.lp(),
-            _ => ()
+            }
+            CLOSING_BRACKET_U8 => {
+                if tape.cells[tape.ptr] != 0 {
+                    tape.continue_loop()
+                }
+            }
+            _ => (),
         }
+        tape.inst_ptr += 1;
     }
 }
