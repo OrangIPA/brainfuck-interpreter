@@ -55,6 +55,22 @@ impl Tape {
         }
     }
 
+    fn skip_loop(&mut self) {
+        let mut count = 0;
+        for i in (self.inst_ptr + 1)..(self.inst.len()) {
+            let inst_char = self.inst.get(i).unwrap().to_owned() as u8;
+            match (count, inst_char) {
+                (0, CLOSING_BRACKET_U8) => {
+                    self.inst_ptr = i;
+                    return;
+                },
+                (_, OPENING_BRACKET_U8) => count += 1,
+                (_, CLOSING_BRACKET_U8) => count -= 1,
+                (_, _) => ()
+            }
+        }
+    }
+
     fn write(&mut self, val: u8) {
         self.cells[self.ptr] = val;
     }
@@ -68,7 +84,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let filename = match args.get(1) {
         None => {
-            println!("Usage: brainfuckinterpreter <input>");
+            println!("Usage: brainfuckinterpreter <input file>");
             return;
         }
         Some(v) => v.to_owned(),
@@ -119,6 +135,11 @@ fn main() {
             CLOSING_BRACKET_U8 => {
                 if tape.cells[tape.ptr] != 0 {
                     tape.continue_loop()
+                }
+            }
+            OPENING_BRACKET_U8 => {
+                if tape.cells[tape.ptr] == 0 {
+                    tape.skip_loop()
                 }
             }
             _ => (),
